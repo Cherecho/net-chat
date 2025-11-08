@@ -84,6 +84,11 @@ int main(int argc, char **argv)
         getline(cin, message);
 
         // --- TAREA: Enviar mensaje al servidor ---
+        int messageLen = message.length();
+        pack<int>(buffer, messageLen);
+        packv<char>(buffer, (char *)message.c_str(), messageLen);
+        sendMSG(connection.serverId, buffer);
+        buffer.clear();
         // ----------------------------------------------------
 
     } while (message != "exit()");
