@@ -54,62 +54,45 @@ void receiveMessages(int serverID, bool &exitChat)
 
 int main(int argc, char **argv)
 {
-    vector<unsigned char> buffer; // Buffer de datos que se enviará al server.
+    vector<unsigned char> buffer;
 
-    string username;       // Nombre del usuario que entra al chat
-    string message;        // Mensaje que escribe el usuario
-    bool exitChat = false; //
+    string username;
+    string message;
+    bool exitChat = false;
 
-    // Pedir nombre de usuario por terminal
-    cout << "Introduzca nombre de usuario:" << endl; //
-    getline(cin, username);                          //
+    cout << "Introduzca nombre de usuario:" << endl;
+    getline(cin, username);
 
-    // Iniciar conexión al server en localhost:3000
-    auto connection = initClient("127.0.0.1", 3000); //
+    auto connection = initClient("127.0.0.1", 3000);
     if (connection.socket == -1)
     {
         cout << "Error: No se pudo conectar al servidor." << endl;
         return -1;
     }
 
-    // Iniciar thread "receiveMessages".
-    thread *receiveThread = new thread(receiveMessages, connection.serverId, ref(exitChat)); //
+    thread *receiveThread = new thread(receiveMessages, connection.serverId, ref(exitChat));
 
-    // --- TAREA: Enviar nombre de usuario al servidor ---
-    // crear buffer de envio que contenga datos de nombre de usuario
-    // empaquetar tamaño de nombreUsuario (int)
-    // empaquetar datos de nombreUsuario (char*)
-    // Enviar buffer al servidor
-
-    // IMPORTANTE limpiar buffer una vez usado:
-    // buffer.clear();
-    //  ----------------------------------------------------
+    int usernameLen = username.length();
+    pack<int>(buffer, usernameLen);
+    packv<char>(buffer, (char *)username.c_str(), usernameLen);
+    sendMSG(connection.serverId, buffer);
+    buffer.clear();
 
     // Bucle hasta que el usuario escribe "exit()"
     do
     {
-        // Leer mensaje de texto del usuario
-        getline(cin, message); //
+        getline(cin, message);
 
         // --- TAREA: Enviar mensaje al servidor ---
-        // crear buffer de envio que contenga datos de mensaje
-        // empaquetar tamaño de mensaje (int)
-        // empaquetar datos de mensaje (char*)
-        // Enviar buffer al servidor
+        // ----------------------------------------------------
 
-        // IMPORTANTE limpiar buffer una vez usado:
-        // buffer.clear();
-        //  ----------------------------------------------------
+    } while (message != "exit()");
 
-    } while (message != "exit()"); //
+    exitChat = true;
 
-    // Marcar variable "salir" para detener el hilo de recepción de mensajes
-    exitChat = true; //
+    receiveThread->join();
 
-    receiveThread->join(); // sincronizar con el thread antes de cerrar la conexión
-
-    // Cerrar conexión con el servidor
     closeConnection(connection.serverId);
 
-    return 0; //
+    return 0;
 }
