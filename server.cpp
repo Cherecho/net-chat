@@ -24,17 +24,23 @@ void handleConnection(int clientID, list<int> &users)
     string message;
 
     // --- TAREA: Recibir nombre de usuario ---
-    // Recibir nombre de usuario del cliente en el buffer
-    // recvMSG(clientID, buffer);
+    recvMSG(clientID, buffer);
 
     // Desempaquetar nombre de usuario:
-    // Para reconstruir un nombre:
-    //  - desempaquetar del buffer la longitud del nombre (int)
-    //  - redimensionar variable nombreUsuario con esa longitud
-    //  - desempaquetar el texto del nombre en los datos de la variable nombreUsuario (char*)
-
-    // buffer.clear();
-    //  ----------------------------------------
+    if (buffer.size() > 0)
+    {
+        int usernameLen = unpack<int>(buffer);
+        username.resize(usernameLen);
+        unpackv<char>(buffer, (char *)username.data(), usernameLen);
+        buffer.clear();
+    }
+    else
+    {
+        cout << "Error: Cliente " << clientID << " se conectó sin enviar nombre." << endl;
+        closeConnection(clientID);
+        return;
+    }
+    // ----------------------------------------
 
     // mostrar mensaje de conexión
     cout << "Usuario Conectado: " << username << endl; //
