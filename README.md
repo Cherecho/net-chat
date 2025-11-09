@@ -124,5 +124,5 @@ std::lock_guard<std::mutex> lock(users_mutex);
 
 **Course**: Distributed Systems Programming (PSDI)  
 **Unit**: 2 - Practical Activity  
-**Institution**: U-TAD
+**Institution**: U-TAD  
 **Date**: November 2025
