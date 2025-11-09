@@ -55,51 +55,48 @@ void handleConnection(int clientID, list<int> &users)
     do
     {
         // Recibir mensaje de texto del cliente
-        // recvMSG(clientID, buffer);
+        recvMSG(clientID, buffer);
 
         // si hay datos en el buffer, recibir
         if (buffer.size() > 0)
         {
 
             // --- TAREA: Reconstruir mensaje ---
-            // Para reconstruir un mensaje de texto:
-            // - desempaquetar del buffer la longitud del mensaje (int)
-            // - redimensionar variable mensaje con esa longitud
-            // - desempaquetar el texto del mensaje en los datos de la variable mensaje (char*)
+            int messageLen = unpack<int>(buffer);
+            message.resize(messageLen);
+            unpackv<char>(buffer, (char *)message.data(), messageLen);
             // ----------------------------------
 
-            // mostrar mensaje recibido
-            cout << "Mensaje recibido: " << username << " dice: " << message << endl; //
+            cout << "Mensaje recibido: " << username << " dice: " << message << endl;
 
             // --- TAREA: Reenviar a todos (broadcast) ---
-            // crear buffer de envío que contenga datos de nombre de usuario y texto
-            // empaquetar tamaño de nombreUsuario
-            // empaquetar datos de nombreUsuario
-            // empaquetar tamaño de mensaje
-            // empaquetar datos de mensaje
+            buffer.clear();
 
-            // bucle por cada identificador almacenado en la lista "users"
-            lock_guard<mutex> lock(users_mutex); // Proteger la lista durante la iteración
+            int usernameLen = username.length();
+            pack<int>(buffer, usernameLen);
+            packv<char>(buffer, (char *)username.c_str(), usernameLen);
+
+            pack<int>(buffer, messageLen);
+            packv<char>(buffer, (char *)message.c_str(), messageLen);
+
+            lock_guard<mutex> lock(users_mutex);
             for (auto &userID : users)
             {
-                // enviar nuevo buffer usando "userld", sin reenviar al que lo envió
                 if (userID != clientID)
                 {
-                    // sendMSG(userID, buffer);
+                    sendMSG(userID, buffer);
                 }
             }
 
-            // IMPORTANTE limpiar buffer una vez usado:
-            // buffer.clear();
-            //  -------------------------------------------
+            buffer.clear();
+            // -------------------------------------------
         }
         else
         {
-            // si no hay datos, error de conexión (el cliente cerró sin enviar mensaje de "exit()")
             cout << "Error: " << username << " cerró inesperadamente." << endl;
-            message = "exit()"; // Forzar salida del bucle
+            message = "exit()";
         }
-    } while (message != "exit()"); //
+    } while (message != "exit()");
 
     // eliminar al cliente de la lista (protegido por mutex)
     {
