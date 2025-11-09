@@ -3,13 +3,15 @@
 #include <string>
 #include <thread>
 #include <list>
-#include <vector>    // Necesario para std::vector
-#include <algorithm> // Necesario para std::find
-#include <mutex>     // Necesario para proteger la lista de usuarios
+#include <vector>
+#include <algorithm>
+#include <mutex>
+#include <map>     // Necesario para los mensajes privados
+#include <sstream> // Necesario para los mensajes privados
 
 using namespace std;
 
-// --- Estilos de Consola ---
+// --- Estilos de Consola (Funcionalidad Extra) ---
 const string C_RESET = "\033[0m";
 const string C_RED = "\033[31m";
 const string C_GREEN = "\033[32m";
@@ -17,18 +19,18 @@ const string C_YELLOW = "\033[33m";
 const string C_MAGENTA = "\033[35m";
 const string C_CYAN = "\033[36m";
 
-// Definición de tipos de mensajes
+// --- Constantes del Protocolo ---
 const int MSG_TYPE_PUBLIC = 0;
 const int MSG_TYPE_PRIVATE = 1;
-const int MSG_TYPE_NOTIFICATION = 2;
+const int MSG_TYPE_NOTIFICATION = 2; // Mensajes del servidor al cliente
 
-// Mutex para proteger la lista de usuarios compartida
+// Mutex para proteger el mapa de usuarios
 mutex users_mutex;
 
 /**
  * @brief Función para atender la conexión de un cliente en un hilo separado
  * @param clientID ID del socket del cliente
- * @param users Lista compartida de IDs de clientes conectados
+ * @param usersMap Mapa compartido de (nombre, ID) de clientes conectados
  */
 void handleConnection(int clientID, map<string, int> &usersMap)
 {
@@ -40,7 +42,6 @@ void handleConnection(int clientID, map<string, int> &usersMap)
     // --- TAREA: Recibir nombre de usuario ---
     recvMSG(clientID, buffer);
 
-    // Desempaquetar nombre de usuario:
     if (buffer.size() > 0)
     {
         int usernameLen = unpack<int>(buffer);
@@ -54,27 +55,24 @@ void handleConnection(int clientID, map<string, int> &usersMap)
         closeConnection(clientID);
         return;
     }
-    // ----------------------------------------
 
-    // mostrar mensaje de conexión
+    // mostrar mensaje de conexión y añadir al mapa
     cout << C_GREEN << "Usuario Conectado: " << username << " (ID: " << clientID << ")" << C_RESET << endl;
-
-    // añadir clientId a la lista "users" compartida (protegido por mutex)
     {
         lock_guard<mutex> lock(users_mutex);
         usersMap[username] = clientID;
     }
 
-    // Bucle repetir mientras no reciba mensaje "exit()" del cliente.
+    // Bucle principal del hilo
     do
     {
+        // Recibir mensaje de texto del cliente
         recvMSG(clientID, buffer);
-
         if (buffer.size() == 0)
         {
             cout << C_YELLOW << "Error: " << username << " cerró inesperadamente." << C_RESET << endl;
-            keepRunning = false;
-            continue;
+            keepRunning = false; // Forzar salida del bucle
+            continue;            // Saltar al final del bucle para la limpieza
         }
 
         // 1. Desempaquetar el tipo de mensaje
@@ -82,24 +80,81 @@ void handleConnection(int clientID, map<string, int> &usersMap)
 
         switch (messageType)
         {
-            // --- Caso 0: Mensaje Público (Broadcast) ---
-            case MSG_TYPE_PUBLIC:
+        // --- Caso 0: Mensaje Público (Broadcast) ---
+        case MSG_TYPE_PUBLIC:
+        {
+            // Desempaquetar el mensaje
+            int messageLen = unpack<int>(buffer);
+            message.resize(messageLen);
+            unpackv<char>(buffer, (char *)message.data(), messageLen);
+
+            cout << "Mensaje recibido (Público): " << username << ": " << message << endl;
+
+            // Comprobar si es un mensaje de salida
+            if (message == "exit()")
             {
-                int messageLen = unpack<int>(buffer);
-                message.resize(messageLen);
-                unpackv<char>(buffer, (char *)message.data(), messageLen);
+                keepRunning = false; // Salir del bucle do-while
+                continue;            // Saltar al final del bucle para la limpieza
+            }
 
-                cout << "Mensaje recibido (Público): " << username << " dice: " << message << endl;
+            // Re-empaquetar para broadcast
+            buffer.clear();
+            pack<int>(buffer, MSG_TYPE_PUBLIC); // Tipo 0 = Público
 
-                if (message == "exit()")
+            int usernameLen = username.length();
+            pack<int>(buffer, usernameLen);
+            packv<char>(buffer, (char *)username.c_str(), usernameLen);
+
+            pack<int>(buffer, messageLen);
+            packv<char>(buffer, (char *)message.c_str(), messageLen);
+
+            // Enviar a todos excepto al remitente
+            lock_guard<mutex> lock(users_mutex);
+            for (auto const &userPair : usersMap)
+            {
+                if (userPair.second != clientID)
                 {
-                    keepRunning = false;
-                    continue;
+                    sendMSG(userPair.second, buffer);
                 }
+            }
+            buffer.clear();
+            break;
+        }
 
+        // --- Caso 1: Mensaje Privado ---
+        case MSG_TYPE_PRIVATE:
+        {
+            // Desempaquetar destinatario
+            int recipientNameLen = unpack<int>(buffer);
+            string recipientName;
+            recipientName.resize(recipientNameLen);
+            unpackv<char>(buffer, (char *)recipientName.data(), recipientNameLen);
+
+            // Desempaquetar mensaje
+            int messageLen = unpack<int>(buffer);
+            message.resize(messageLen);
+            unpackv<char>(buffer, (char *)message.data(), messageLen);
+
+            cout << C_MAGENTA << "Mensaje recibido (Privado): " << username << " para " << recipientName << C_RESET << endl;
+
+            int recipientID = -1;
+            string notificationMessage;
+
+            // Buscar al destinatario en el mapa (protegido)
+            {
+                lock_guard<mutex> lock(users_mutex);
+                if (usersMap.count(recipientName))
+                {
+                    recipientID = usersMap[recipientName];
+                }
+            }
+
+            // Si se encuentra, enviar mensaje privado
+            if (recipientID != -1)
+            {
+                // 1. Preparar buffer para el destinatario
                 buffer.clear();
-                // AÑADIMOS EL TIPO AL REENVÍO
-                pack<int>(buffer, MSG_TYPE_PUBLIC);
+                pack<int>(buffer, MSG_TYPE_PRIVATE); // Tipo 1 = Privado
 
                 int usernameLen = username.length();
                 pack<int>(buffer, usernameLen);
@@ -108,90 +163,42 @@ void handleConnection(int clientID, map<string, int> &usersMap)
                 pack<int>(buffer, messageLen);
                 packv<char>(buffer, (char *)message.c_str(), messageLen);
 
-                lock_guard<mutex> lock(users_mutex);
-                for (auto const &userPair : usersMap)
-                {
-                    if (userPair.second != clientID)
-                    {
-                        sendMSG(userPair.second, buffer);
-                    }
-                }
-                buffer.clear();
-                break;
-            }
+                sendMSG(recipientID, buffer); // Enviar al destinatario
 
-            // --- Caso 1: Mensaje Privado ---
-            case MSG_TYPE_PRIVATE:
+                // 2. Preparar notificación de éxito para el remitente
+                notificationMessage = "Mensaje enviado a " + recipientName;
+            }
+            // Si no se encuentra, notificar al remitente
+            else
             {
-                // Desempaquetar destinatario
-                int recipientNameLen = unpack<int>(buffer);
-                string recipientName;
-                recipientName.resize(recipientNameLen);
-                unpackv<char>(buffer, (char *)recipientName.data(), recipientNameLen);
-
-                // Desempaquetar mensaje
-                int messageLen = unpack<int>(buffer);
-                message.resize(messageLen);
-                unpackv<char>(buffer, (char *)message.data(), messageLen);
-
-                cout << C_MAGENTA << "Mensaje recibido (Privado): " << username << " para " << recipientName << C_RESET << endl;
-
-                int recipientID = -1;
-                string notificationMessage;
-
-                {
-                    lock_guard<mutex> lock(users_mutex);
-                    if (usersMap.count(recipientName))
-                    {
-                        recipientID = usersMap[recipientName];
-                    }
-                }
-
-                if (recipientID != -1)
-                {
-                    // 1. Preparar buffer para el destinatario
-                    buffer.clear();
-                    pack<int>(buffer, MSG_TYPE_PRIVATE); // Tipo 1
-
-                    int usernameLen = username.length();
-                    pack<int>(buffer, usernameLen);
-                    packv<char>(buffer, (char *)username.c_str(), usernameLen);
-
-                    pack<int>(buffer, messageLen);
-                    packv<char>(buffer, (char *)message.c_str(), messageLen);
-
-                    sendMSG(recipientID, buffer); // Enviar al destinatario
-
-                    notificationMessage = "Mensaje enviado a " + recipientName;
-                }
-                else
-                {
-                    notificationMessage = "Error: Usuario '" + recipientName + "' no encontrado.";
-                }
-
-                // 2. Enviar notificación de vuelta al remitente
-                buffer.clear();
-                pack<int>(buffer, MSG_TYPE_NOTIFICATION); // Tipo 2
-                string serverName = "Servidor";
-                int serverNameLen = serverName.length();
-                pack<int>(buffer, serverNameLen);
-                packv<char>(buffer, (char *)serverName.c_str(), serverNameLen);
-
-                int notificationLen = notificationMessage.length();
-                pack<int>(buffer, notificationLen);
-                packv<char>(buffer, (char *)notificationMessage.c_str(), notificationLen);
-
-                sendMSG(clientID, buffer);
-
-                buffer.clear();
-                break;
+                notificationMessage = "Error: Usuario '" + recipientName + "' no encontrado.";
             }
+
+            // Enviar notificación de vuelta al remitente
+            buffer.clear();
+            pack<int>(buffer, MSG_TYPE_NOTIFICATION); // Tipo 2 = Notificación
+            string serverName = "Servidor";
+            int serverNameLen = serverName.length();
+            pack<int>(buffer, serverNameLen);
+            packv<char>(buffer, (char *)serverName.c_str(), serverNameLen);
+
+            int notificationLen = notificationMessage.length();
+            pack<int>(buffer, notificationLen);
+            packv<char>(buffer, (char *)notificationMessage.c_str(), notificationLen);
+
+            sendMSG(clientID, buffer);
+
+            buffer.clear();
+            break;
+        }
         } // fin del switch
 
     } while (keepRunning);
 
+    // --- INICIO SOLUCIÓN "Lost Connection" ---
+    // Notificar al cliente que se está cerrando la conexión
     buffer.clear();
-    pack<int>(buffer, MSG_TYPE_NOTIFICATION); // Tipo 2
+    pack<int>(buffer, MSG_TYPE_NOTIFICATION); // Tipo 2 = Notificación
     string serverName = "Servidor";
     int serverNameLen = serverName.length();
     pack<int>(buffer, serverNameLen);
@@ -202,9 +209,10 @@ void handleConnection(int clientID, map<string, int> &usersMap)
     pack<int>(buffer, exitMessageLen);
     packv<char>(buffer, (char *)exitMessage.c_str(), exitMessageLen);
 
-    sendMSG(clientID, buffer);
+    sendMSG(clientID, buffer); // Enviar confirmación de "exit()"
+    // --- FIN SOLUCIÓN ---
 
-    // eliminar al cliente de la lista (protegido por mutex)
+    // eliminar al cliente del mapa (protegido)
     {
         lock_guard<mutex> lock(users_mutex);
         usersMap.erase(username);
@@ -228,6 +236,7 @@ int main(int argc, char **argv)
 
     cout << C_GREEN << "Servidor iniciado en el puerto 3000. Esperando conexiones..." << C_RESET << endl;
 
+    // Cambiamos la lista de usuarios por un mapa [nombre -> clientID]
     map<string, int> usersMap;
 
     // bucle infinito
@@ -243,9 +252,9 @@ int main(int argc, char **argv)
         auto newClientID = getLastClientID();
 
         // Crear hilo paralelo en el que se ejecuta "handleConnection"
-        // Se pasa el id y la referencia a la lista compartida
+        // Se pasa el id y la referencia al mapa compartido
         thread *clientThread = new thread(handleConnection, newClientID, ref(usersMap));
-        clientThread->detach(); // El hilo se ejecutará de forma independiente
+        clientThread->detach();
     }
 
     close(serverSocketFD); // cerrar el servidor
