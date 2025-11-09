@@ -21,36 +21,57 @@ void receiveMessages(int serverID, bool &exitChat)
     while (!exitChat)
     {
 
-        // Recibir mensaje del servidor
         recvMSG(serverID, buffer);
 
-        // si hay datos en el buffer.
-        if (buffer.size() > 0)
+        if (buffer.size() == 0)
         {
-            // desempaquetar del buffer la longitud del nombreUsuario
-            int usernameLen = unpack<int>(buffer);
-            username.resize(usernameLen);
-            unpackv<char>(buffer, (char *)username.data(), usernameLen);
-
-            // desempaquetar del buffer la longitud del mensaje
-            int messageLen = unpack<int>(buffer);
-            message.resize(messageLen);
-            unpackv<char>(buffer, (char *)message.data(), messageLen);
-
-            // mostrar mensaje recibido
-            cout << "Mensaje recibido: " << username << " dice: " << message << endl;
-
-            buffer.clear();
-        }
-        else
-        {
-            // El servidor cerró la conexión
             if (!exitChat)
             {
                 exitChat = true;
-                // No mostramos error si la salida es limpia
+                cout << "El servidor ha cerrado la conexión." << endl;
             }
+            continue;
         }
+
+        // 1. Desempaquetar tipo de mensaje
+        int messageType = unpack<int>(buffer);
+
+        // 2. Desempaquetar nombre de usuario
+        int usernameLen = unpack<int>(buffer);
+        username.resize(usernameLen);
+        unpackv<char>(buffer, (char *)username.data(), usernameLen);
+
+        // 3. Desempaquetar mensaje
+        int messageLen = unpack<int>(buffer);
+        message.resize(messageLen);
+        unpackv<char>(buffer, (char *)message.data(), messageLen);
+
+        // 4. Mostrar según el tipo
+        switch (messageType)
+        {
+        case MSG_TYPE_PUBLIC: // Mensaje Público
+            cout << "\n"
+                 << username << " dice: " << message << endl;
+            break;
+        case MSG_TYPE_PRIVATE: // Mensaje Privado
+            cout << "\n"
+                 << "(Mensaje privado) " << username << " dice: " << message << endl;
+            break;
+        case MSG_TYPE_NOTIFICATION: // Notificación del Servidor
+            // Si es la notificación de 'exit()', solo salimos del bucle
+            if (message == "exit()")
+            {
+                exitChat = true;
+                continue; // No imprimas "Notificación: exit()"
+            }
+            cout << "\n"
+                 << "Notificación: " << message << endl;
+            break;
+        }
+
+        cout << "> "; // Volver a mostrar el prompt
+        fflush(stdout);
+        buffer.clear();
     }
 }
 
