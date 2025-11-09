@@ -7,6 +7,10 @@
 
 using namespace std;
 
+const int MSG_TYPE_PUBLIC = 0;
+const int MSG_TYPE_PRIVATE = 1;
+const int MSG_TYPE_NOTIFICATION = 2;
+
 /**
  * @brief Función para recibir en paralelo mensajes reenviados por el servidor
  * @param serverID ID del socket del servidor
