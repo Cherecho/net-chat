@@ -74,52 +74,110 @@ void handleConnection(int clientID, map<string, int> &usersMap)
 
         switch (messageType)
         {
-        // --- Caso 0: Mensaje Público (Broadcast) ---
-        case MSG_TYPE_PUBLIC:
-        {
-            int messageLen = unpack<int>(buffer);
-            message.resize(messageLen);
-            unpackv<char>(buffer, (char *)message.data(), messageLen);
-
-            cout << "Mensaje recibido (Público): " << username << " dice: " << message << endl;
-
-            if (message == "exit()")
+            // --- Caso 0: Mensaje Público (Broadcast) ---
+            case MSG_TYPE_PUBLIC:
             {
-                keepRunning = false;
-                continue;
-            }
+                int messageLen = unpack<int>(buffer);
+                message.resize(messageLen);
+                unpackv<char>(buffer, (char *)message.data(), messageLen);
 
-            buffer.clear();
-            // AÑADIMOS EL TIPO AL REENVÍO
-            pack<int>(buffer, MSG_TYPE_PUBLIC);
+                cout << "Mensaje recibido (Público): " << username << " dice: " << message << endl;
 
-            int usernameLen = username.length();
-            pack<int>(buffer, usernameLen);
-            packv<char>(buffer, (char *)username.c_str(), usernameLen);
-
-            pack<int>(buffer, messageLen);
-            packv<char>(buffer, (char *)message.c_str(), messageLen);
-
-            lock_guard<mutex> lock(users_mutex);
-            for (auto const &userPair : usersMap)
-            {
-                if (userPair.second != clientID)
+                if (message == "exit()")
                 {
-                    sendMSG(userPair.second, buffer);
+                    keepRunning = false;
+                    continue;
                 }
-            }
-            buffer.clear();
-            break;
-        }
 
-        // --- Caso 1: Mensaje Privado (AÚN NO IMPLEMENTADO) ---
-        case MSG_TYPE_PRIVATE:
-        {
-            cout << "Mensaje privado recibido de " << username << ". (Lógica no implementada)" << endl;
-            // Limpiamos el buffer para que no se atasque
-            buffer.clear();
-            break;
-        }
+                buffer.clear();
+                // AÑADIMOS EL TIPO AL REENVÍO
+                pack<int>(buffer, MSG_TYPE_PUBLIC);
+
+                int usernameLen = username.length();
+                pack<int>(buffer, usernameLen);
+                packv<char>(buffer, (char *)username.c_str(), usernameLen);
+
+                pack<int>(buffer, messageLen);
+                packv<char>(buffer, (char *)message.c_str(), messageLen);
+
+                lock_guard<mutex> lock(users_mutex);
+                for (auto const &userPair : usersMap)
+                {
+                    if (userPair.second != clientID)
+                    {
+                        sendMSG(userPair.second, buffer);
+                    }
+                }
+                buffer.clear();
+                break;
+            }
+
+            // --- Caso 1: Mensaje Privado ---
+            case MSG_TYPE_PRIVATE:
+            {
+                // Desempaquetar destinatario
+                int recipientNameLen = unpack<int>(buffer);
+                string recipientName;
+                recipientName.resize(recipientNameLen);
+                unpackv<char>(buffer, (char *)recipientName.data(), recipientNameLen);
+
+                // Desempaquetar mensaje
+                int messageLen = unpack<int>(buffer);
+                message.resize(messageLen);
+                unpackv<char>(buffer, (char *)message.data(), messageLen);
+
+                cout << "Mensaje recibido (Privado): " << username << " para " << recipientName << endl;
+
+                int recipientID = -1;
+                string notificationMessage;
+
+                {
+                    lock_guard<mutex> lock(users_mutex);
+                    if (usersMap.count(recipientName))
+                    {
+                        recipientID = usersMap[recipientName];
+                    }
+                }
+
+                if (recipientID != -1)
+                {
+                    // 1. Preparar buffer para el destinatario
+                    buffer.clear();
+                    pack<int>(buffer, MSG_TYPE_PRIVATE); // Tipo 1
+
+                    int usernameLen = username.length();
+                    pack<int>(buffer, usernameLen);
+                    packv<char>(buffer, (char *)username.c_str(), usernameLen);
+
+                    pack<int>(buffer, messageLen);
+                    packv<char>(buffer, (char *)message.c_str(), messageLen);
+
+                    sendMSG(recipientID, buffer); // Enviar al destinatario
+
+                    notificationMessage = "Mensaje enviado a " + recipientName;
+                }
+                else
+                {
+                    notificationMessage = "Error: Usuario '" + recipientName + "' no encontrado.";
+                }
+
+                // 2. Enviar notificación de vuelta al remitente
+                buffer.clear();
+                pack<int>(buffer, MSG_TYPE_NOTIFICATION); // Tipo 2
+                string serverName = "Servidor";
+                int serverNameLen = serverName.length();
+                pack<int>(buffer, serverNameLen);
+                packv<char>(buffer, (char *)serverName.c_str(), serverNameLen);
+
+                int notificationLen = notificationMessage.length();
+                pack<int>(buffer, notificationLen);
+                packv<char>(buffer, (char *)notificationMessage.c_str(), notificationLen);
+
+                sendMSG(clientID, buffer);
+
+                buffer.clear();
+                break;
+            }
         } // fin del switch
 
     } while (keepRunning);
