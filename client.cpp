@@ -7,6 +7,15 @@
 
 using namespace std;
 
+// --- Estilos de Consola ---
+const string C_RESET = "\033[0m";
+const string C_RED = "\033[31m";
+const string C_GREEN = "\033[32m";
+const string C_YELLOW = "\033[33m";
+const string C_MAGENTA = "\033[35m";
+const string C_CYAN = "\033[36m";
+const string C_BOLD = "\033[1m";
+
 const int MSG_TYPE_PUBLIC = 0;
 const int MSG_TYPE_PRIVATE = 1;
 const int MSG_TYPE_NOTIFICATION = 2;
@@ -32,7 +41,7 @@ void receiveMessages(int serverID, bool &exitChat)
             if (!exitChat)
             {
                 exitChat = true;
-                cout << "El servidor ha cerrado la conexión." << endl;
+                cout << C_RED << "\nEl servidor ha cerrado la conexión inesperadamente." << C_RESET << endl;
             }
             continue;
         }
@@ -54,12 +63,10 @@ void receiveMessages(int serverID, bool &exitChat)
         switch (messageType)
         {
         case MSG_TYPE_PUBLIC: // Mensaje Público
-            cout << "\n"
-                 << username << " dice: " << message << endl;
+            cout << "\n" << C_BOLD << username << C_RESET << " dice: " << message << endl;
             break;
         case MSG_TYPE_PRIVATE: // Mensaje Privado
-            cout << "\n"
-                 << "(Mensaje privado) " << username << " dice: " << message << endl;
+            cout << "\n" << C_MAGENTA << "(Mensaje privado) " << C_BOLD << username << C_RESET << C_MAGENTA << " dice: " << message << C_RESET << endl;
             break;
         case MSG_TYPE_NOTIFICATION: // Notificación del Servidor
             // Si es la notificación de 'exit()', solo salimos del bucle
@@ -68,12 +75,11 @@ void receiveMessages(int serverID, bool &exitChat)
                 exitChat = true;
                 continue; // No imprimas "Notificación: exit()"
             }
-            cout << "\n"
-                 << "Notificación: " << message << endl;
+            cout << "\n" << C_YELLOW << "Notificación: " << message << C_RESET << endl;
             break;
         }
 
-        cout << "> "; // Volver a mostrar el prompt
+        cout << C_GREEN << "> " << C_RESET; // Volver a mostrar el prompt
         fflush(stdout);
         buffer.clear();
     }
@@ -88,15 +94,17 @@ int main(int argc, char **argv)
     string message;
     bool exitChat = false;
 
-    cout << "Introduzca nombre de usuario:" << endl;
+    cout << C_CYAN << "Introduzca nombre de usuario:" << C_RESET << endl;
     getline(cin, username);
 
     auto connection = initClient("127.0.0.1", 3000);
     if (connection.socket == -1)
     {
-        cout << "Error: No se pudo conectar al servidor." << endl;
+        cout << C_RED << "Error: No se pudo conectar al servidor." << C_RESET << endl;
         return -1;
     }
+
+    cout << C_GREEN << "Conectado al servidor. Escribe 'exit()' para salir o '/msg <usuario> <mensaje>' para mensaje privado." << C_RESET << endl;
 
     thread *receiveThread = new thread(receiveMessages, connection.serverId, ref(exitChat));
 
@@ -109,6 +117,7 @@ int main(int argc, char **argv)
     // Bucle hasta que el usuario escribe "exit()"
     do
     {
+        cout << C_GREEN << "> " << C_RESET;
         getline(cin, inputLine);
 
         // --- LÓGICA DE MENSAJE PRIVADO ---
@@ -127,7 +136,7 @@ int main(int argc, char **argv)
 
             if (recipientName.empty() || message.empty())
             {
-                cout << "Error: Formato incorrecto. Use: /msg <usuario> <mensaje>" << endl;
+                cout << C_RED << "Error: Formato incorrecto. Use: /msg <usuario> <mensaje>" << C_RESET << endl;
                 continue;
             }
 
