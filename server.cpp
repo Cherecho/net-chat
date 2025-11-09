@@ -17,7 +17,7 @@ mutex users_mutex;
  * @param clientID ID del socket del cliente
  * @param users Lista compartida de IDs de clientes conectados
  */
-void handleConnection(int clientID, list<int> &users)
+void handleConnection(int clientID, map<string, int> &usersMap)
 {
     vector<unsigned char> buffer;
     string username;
@@ -48,7 +48,7 @@ void handleConnection(int clientID, list<int> &users)
     // añadir clientId a la lista "users" compartida (protegido por mutex)
     {
         lock_guard<mutex> lock(users_mutex);
-        users.push_back(clientID);
+        usersMap[username] = clientID;
     }
 
     // Bucle repetir mientras no reciba mensaje "exit()" del cliente.
@@ -80,11 +80,11 @@ void handleConnection(int clientID, list<int> &users)
             packv<char>(buffer, (char *)message.c_str(), messageLen);
 
             lock_guard<mutex> lock(users_mutex);
-            for (auto &userID : users)
+            for (auto const &userPair : usersMap)
             {
-                if (userID != clientID)
+                if (userPair.second != clientID)
                 {
-                    sendMSG(userID, buffer);
+                    sendMSG(userPair.second, buffer);
                 }
             }
 
@@ -117,7 +117,7 @@ void handleConnection(int clientID, list<int> &users)
     // eliminar al cliente de la lista (protegido por mutex)
     {
         lock_guard<mutex> lock(users_mutex);
-        users.erase(find(users.begin(), users.end(), clientID));
+        usersMap.erase(username);
     }
 
     cout << "Usuario Desconectado: " << username << endl;
@@ -138,7 +138,7 @@ int main(int argc, char **argv)
 
     cout << "Servidor iniciado en el puerto 3000. Esperando conexiones..." << endl;
 
-    list<int> usersList; //
+    map<string, int> usersMap;
 
     // bucle infinito
     while (1)
@@ -154,7 +154,7 @@ int main(int argc, char **argv)
 
         // Crear hilo paralelo en el que se ejecuta "handleConnection"
         // Se pasa el id y la referencia a la lista compartida
-        thread *clientThread = new thread(handleConnection, newClientID, ref(usersList));
+        thread *clientThread = new thread(handleConnection, newClientID, ref(usersMap));
         clientThread->detach(); // El hilo se ejecutará de forma independiente
     }
 
