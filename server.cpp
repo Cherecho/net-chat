@@ -9,6 +9,14 @@
 
 using namespace std;
 
+// --- Estilos de Consola ---
+const string C_RESET = "\033[0m";
+const string C_RED = "\033[31m";
+const string C_GREEN = "\033[32m";
+const string C_YELLOW = "\033[33m";
+const string C_MAGENTA = "\033[35m";
+const string C_CYAN = "\033[36m";
+
 // Definición de tipos de mensajes
 const int MSG_TYPE_PUBLIC = 0;
 const int MSG_TYPE_PRIVATE = 1;
@@ -42,14 +50,14 @@ void handleConnection(int clientID, map<string, int> &usersMap)
     }
     else
     {
-        cout << "Error: Cliente " << clientID << " se conectó sin enviar nombre." << endl;
+        cout << C_RED << "Error: Cliente " << clientID << " se conectó sin enviar nombre." << C_RESET << endl;
         closeConnection(clientID);
         return;
     }
     // ----------------------------------------
 
     // mostrar mensaje de conexión
-    cout << "Usuario Conectado: " << username << endl; //
+    cout << C_GREEN << "Usuario Conectado: " << username << " (ID: " << clientID << ")" << C_RESET << endl;
 
     // añadir clientId a la lista "users" compartida (protegido por mutex)
     {
@@ -64,7 +72,7 @@ void handleConnection(int clientID, map<string, int> &usersMap)
 
         if (buffer.size() == 0)
         {
-            cout << "Error: " << username << " cerró inesperadamente." << endl;
+            cout << C_YELLOW << "Error: " << username << " cerró inesperadamente." << C_RESET << endl;
             keepRunning = false;
             continue;
         }
@@ -126,7 +134,7 @@ void handleConnection(int clientID, map<string, int> &usersMap)
                 message.resize(messageLen);
                 unpackv<char>(buffer, (char *)message.data(), messageLen);
 
-                cout << "Mensaje recibido (Privado): " << username << " para " << recipientName << endl;
+                cout << C_MAGENTA << "Mensaje recibido (Privado): " << username << " para " << recipientName << C_RESET << endl;
 
                 int recipientID = -1;
                 string notificationMessage;
@@ -202,7 +210,7 @@ void handleConnection(int clientID, map<string, int> &usersMap)
         usersMap.erase(username);
     }
 
-    cout << "Usuario Desconectado: " << username << endl;
+    cout << C_YELLOW << "Usuario Desconectado: " << username << C_RESET << endl;
 
     // cerrar conexión con el cliente
     closeConnection(clientID);
@@ -214,11 +222,11 @@ int main(int argc, char **argv)
     auto serverSocketFD = initServer(3000);
     if (serverSocketFD == -1)
     {
-        cout << "Error al iniciar el servidor." << endl;
+        cout << C_RED << "Error al iniciar el servidor." << C_RESET << endl;
         return -1;
     }
 
-    cout << "Servidor iniciado en el puerto 3000. Esperando conexiones..." << endl;
+    cout << C_GREEN << "Servidor iniciado en el puerto 3000. Esperando conexiones..." << C_RESET << endl;
 
     map<string, int> usersMap;
 
