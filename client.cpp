@@ -43,10 +43,11 @@ void receiveMessages(int serverID, bool &exitChat)
         }
         else
         {
+            // El servidor cerró la conexión
             if (!exitChat)
             {
                 exitChat = true;
-                cout << "El servidor ha cerrado la conexión." << endl;
+                // No mostramos error si la salida es limpia
             }
         }
     }

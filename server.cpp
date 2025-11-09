@@ -98,6 +98,22 @@ void handleConnection(int clientID, list<int> &users)
         }
     } while (message != "exit()");
 
+    if (message == "exit()")
+    {
+        buffer.clear();
+        string serverName = "Servidor";
+        int serverNameLen = serverName.length();
+        int messageLen = message.length();
+
+        pack<int>(buffer, serverNameLen);
+        packv<char>(buffer, (char *)serverName.c_str(), serverNameLen);
+
+        pack<int>(buffer, messageLen);
+        packv<char>(buffer, (char *)message.c_str(), messageLen);
+
+        sendMSG(clientID, buffer);
+    }
+
     // eliminar al cliente de la lista (protegido por mutex)
     {
         lock_guard<mutex> lock(users_mutex);
