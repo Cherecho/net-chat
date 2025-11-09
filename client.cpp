@@ -13,36 +13,36 @@ using namespace std;
  */
 void receiveMessages(int serverID, bool &exitChat)
 {
-    vector<unsigned char> buffer; // Buffer de datos que se recibirán
-    string username;              // Variable para almacenar el nombre del usuario
-    string message;               // Variable para almacenar el mensaje
+    vector<unsigned char> buffer;
+    string username;
+    string message;
 
-    // bucle mientras no salir
     while (!exitChat)
     {
 
         // Recibir mensaje del servidor
-        //  !!AQUÍ DEBES LLAMAR A recvMSG(serverID, buffer);!!
+        recvMSG(serverID, buffer);
 
         // si hay datos en el buffer.
         if (buffer.size() > 0)
         {
             // desempaquetar del buffer la longitud del nombreUsuario
-            // - redimensionar variable nombreUsuario con esa longitud
-            // - desempaquetar el texto del nombre en los datos de la variable nombreUsuario
+            int usernameLen = unpack<int>(buffer);
+            username.resize(usernameLen);
+            unpackv<char>(buffer, (char *)username.data(), usernameLen);
 
             // desempaquetar del buffer la longitud del mensaje
-            // - redimensionar variable mensaje con esa longitud
-            // - desempaquetar el texto del mensaje en los datos de la variable mensaje
+            int messageLen = unpack<int>(buffer);
+            message.resize(messageLen);
+            unpackv<char>(buffer, (char *)message.data(), messageLen);
 
             // mostrar mensaje recibido
             cout << "Mensaje recibido: " << username << " dice: " << message << endl;
 
-            // !!AQUÍ DEBES LIMPIAR EL BUFFER: buffer.clear();!!
+            buffer.clear();
         }
         else
         {
-            // conexión cerrada, salir
             if (!exitChat)
             {
                 exitChat = true;
