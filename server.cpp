@@ -9,6 +9,11 @@
 
 using namespace std;
 
+// Definición de tipos de mensajes
+const int MSG_TYPE_PUBLIC = 0;
+const int MSG_TYPE_PRIVATE = 1;
+const int MSG_TYPE_NOTIFICATION = 2;
+
 // Mutex para proteger la lista de usuarios compartida
 mutex users_mutex;
 
@@ -22,6 +27,7 @@ void handleConnection(int clientID, map<string, int> &usersMap)
     vector<unsigned char> buffer;
     string username;
     string message;
+    bool keepRunning = true;
 
     // --- TAREA: Recibir nombre de usuario ---
     recvMSG(clientID, buffer);
@@ -54,23 +60,38 @@ void handleConnection(int clientID, map<string, int> &usersMap)
     // Bucle repetir mientras no reciba mensaje "exit()" del cliente.
     do
     {
-        // Recibir mensaje de texto del cliente
         recvMSG(clientID, buffer);
 
-        // si hay datos en el buffer, recibir
-        if (buffer.size() > 0)
+        if (buffer.size() == 0)
         {
+            cout << "Error: " << username << " cerró inesperadamente." << endl;
+            keepRunning = false;
+            continue;
+        }
 
-            // --- TAREA: Reconstruir mensaje ---
+        // 1. Desempaquetar el tipo de mensaje
+        int messageType = unpack<int>(buffer);
+
+        switch (messageType)
+        {
+        // --- Caso 0: Mensaje Público (Broadcast) ---
+        case MSG_TYPE_PUBLIC:
+        {
             int messageLen = unpack<int>(buffer);
             message.resize(messageLen);
             unpackv<char>(buffer, (char *)message.data(), messageLen);
-            // ----------------------------------
 
-            cout << "Mensaje recibido: " << username << " dice: " << message << endl;
+            cout << "Mensaje recibido (Público): " << username << " dice: " << message << endl;
 
-            // --- TAREA: Reenviar a todos (broadcast) ---
+            if (message == "exit()")
+            {
+                keepRunning = false;
+                continue;
+            }
+
             buffer.clear();
+            // AÑADIMOS EL TIPO AL REENVÍO
+            pack<int>(buffer, MSG_TYPE_PUBLIC);
 
             int usernameLen = username.length();
             pack<int>(buffer, usernameLen);
@@ -87,32 +108,35 @@ void handleConnection(int clientID, map<string, int> &usersMap)
                     sendMSG(userPair.second, buffer);
                 }
             }
-
             buffer.clear();
-            // -------------------------------------------
+            break;
         }
-        else
+
+        // --- Caso 1: Mensaje Privado (AÚN NO IMPLEMENTADO) ---
+        case MSG_TYPE_PRIVATE:
         {
-            cout << "Error: " << username << " cerró inesperadamente." << endl;
-            message = "exit()";
+            cout << "Mensaje privado recibido de " << username << ". (Lógica no implementada)" << endl;
+            // Limpiamos el buffer para que no se atasque
+            buffer.clear();
+            break;
         }
-    } while (message != "exit()");
+        } // fin del switch
 
-    if (message == "exit()")
-    {
-        buffer.clear();
-        string serverName = "Servidor";
-        int serverNameLen = serverName.length();
-        int messageLen = message.length();
+    } while (keepRunning);
 
-        pack<int>(buffer, serverNameLen);
-        packv<char>(buffer, (char *)serverName.c_str(), serverNameLen);
+    buffer.clear();
+    pack<int>(buffer, MSG_TYPE_NOTIFICATION); // Tipo 2
+    string serverName = "Servidor";
+    int serverNameLen = serverName.length();
+    pack<int>(buffer, serverNameLen);
+    packv<char>(buffer, (char *)serverName.c_str(), serverNameLen);
 
-        pack<int>(buffer, messageLen);
-        packv<char>(buffer, (char *)message.c_str(), messageLen);
+    string exitMessage = "exit()";
+    int exitMessageLen = exitMessage.length();
+    pack<int>(buffer, exitMessageLen);
+    packv<char>(buffer, (char *)exitMessage.c_str(), exitMessageLen);
 
-        sendMSG(clientID, buffer);
-    }
+    sendMSG(clientID, buffer);
 
     // eliminar al cliente de la lista (protegido por mutex)
     {
